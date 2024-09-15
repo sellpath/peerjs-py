@@ -1,0 +1,4 @@
+.eggs/
+.venv/
+.venv3.12/
+src/peerjs_py.egg-info/
