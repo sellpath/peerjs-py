@@ -10,11 +10,13 @@ class PyTest(TestCommand):
 setup(
     name="peerjs_py",
     version="0.1.0",
-    packages=find_packages(where="src"),
+    packages=find_packages(where="src/peerjs_py"),
+    package_dir={"": "src"},
     install_requires=[
         "aiortc>=1.9.0,<2.0.0",
         "pyee>=12.0.0,<13.0.0",
-        # "aiohttp>=3.7.4,<4.0.0",
+        "aiohttp>=3.7.4,<4.0.0",
+        "requests>=2.25.1,<3.0.0",
         # "websockets>=9.1,<10.0",
     ],
     package_dir={"": "src"},
