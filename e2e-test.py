@@ -7,6 +7,10 @@ import aiohttp
 from typing import Any
 from pathlib import Path
 
+from aiortc.contrib.media import MediaPlayer, MediaRelay, MediaRecorder
+import wave
+import audioop
+
 from peerjs_py.peer import Peer, PeerOptions
 from peerjs_py.util import util, DEFAULT_CONFIG
 from peerjs_py.enums import ConnectionEventType, PeerEventType
@@ -164,7 +168,77 @@ async def connect_peers(peer1, peer2):
     except Exception as e:
         logger.error(f"e2e test: Error establishing connection: {str(e)}")
 
+async def setup_voice_call(peer1, peer2):
+    logger.info(f"Setting up voice call between {peer1._id} and {peer2._id}")
+    
+    try:
+        voice_file = "tests/sample-3s.mp3"
+        player = MediaPlayer(voice_file)
+        
+        output_file = "tests/received_audio.wav"
+        recorder = MediaRecorder(output_file)
+    except Exception as e:
+        logger.error(f"Error setting up MediaPlayer or MediaRecorder: {str(e)}")
+        raise
 
+    call_established = asyncio.Event()
+
+    logger.info(f"Registering 'call' event handler for {peer2._id}")
+    @peer2.on('call')
+    async def on_call(incoming_call):
+        logger.info(f"{peer2._id} received incoming call from {peer1._id}")
+        
+        @incoming_call.on('stream')
+        async def on_stream(stream):
+            logger.info(f"Voice call established between {peer1._id} and {peer2._id}")
+            await recorder.start(stream)
+            call_established.set()
+        
+        logger.info(f"{peer2._id} answering call")
+        await incoming_call.answer(None)  # Answer the call without sending a stream
+    
+    try:
+        # Set up the call from peer1 to peer2
+        logger.info(f"{peer1._id} initiating call to {peer2._id}")
+        call = await asyncio.wait_for(peer1.call(peer2._id, player.audio), timeout=5)
+        logger.info(f"Call initiated by {peer1._id}")
+        
+        open_timeout = 10
+        start_time = asyncio.get_event_loop().time()
+        while not call.open:
+            if asyncio.get_event_loop().time() - start_time > open_timeout:
+                raise TimeoutError("Timeout waiting for call connection to open")
+            await asyncio.sleep(0.1)
+
+        logger.info(f"Call connection opened for {peer1._id}")
+
+        logger.info("Waiting for call to be established")
+        await asyncio.wait_for(call_established.wait(), timeout=5)
+        logger.info("Voice call setup completed")
+        
+        # Let the call run for the duration of the audio file (3 seconds) plus a small buffer
+        await asyncio.sleep(5)
+        
+        # Stop recording and close the call
+        await recorder.stop()
+        call.close()
+        logger.info("Voice call ended and audio saved")
+        
+        # Verify the recorded audio
+        verify_recorded_audio(output_file)
+        
+    except asyncio.TimeoutError:
+        logger.error(f"Timeout while setting up voice call between {peer1._id} and {peer2._id}")
+    except Exception as e:
+        logger.error(f"Error during voice call: {str(e)}")
+
+def verify_recorded_audio(file_path):
+    try:
+        with wave.open(file_path, 'rb') as wf:
+            logger.info(f"file exist: {file_path}")
+    except Exception as e:
+        raise e
+    
 async def send_message(connection, message):
     logger.info(f"Attempting to send message: {message}")
     try:
@@ -187,11 +261,11 @@ async def async_main():
         logger.info('e2e test: >>>>> Starting two peers and connecting them. <<<<')
         peer1 = await create_peer("peer1")
         peer2 = await create_peer("peer2")
-        
-        # logger.info('e2e test: wait 2 sec')
-        # await asyncio.sleep(2)
-        # Connect peer1 to peer2
+      
         await connect_peers(peer1, peer2)
+        await asyncio.sleep(5)
+        logger.info('e2e test: >>>>> Starting two peers and call them with audio. <<<<')
+        await setup_voice_call(peer1, peer2)
         
         # Keep the program running for a while to allow for message exchange
         await asyncio.sleep(5)

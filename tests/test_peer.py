@@ -5,7 +5,9 @@ from peerjs_py.peer import Peer, PeerOptions, LogLevel, ReferrerPolicy, PeerErro
 from peerjs_py.api import API
 from peerjs_py.option_interfaces import PeerJSOption
 from peerjs_py.logger import logger, LogLevel
-from peerjs_py.enums import SocketEventType
+from peerjs_py.enums import SocketEventType, PeerEventType
+from aiortc import MediaStreamTrack
+from aiortc import RTCPeerConnection, RTCSessionDescription, RTCIceCandidate, MediaStreamTrack, RTCDataChannel
 
 class TestPeer(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
@@ -15,7 +17,7 @@ class TestPeer(unittest.IsolatedAsyncioTestCase):
         self.mock_socket_patcher = patch('peerjs_py.peer.Socket')
         self.mock_api = self.mock_api_patcher.start()
         self.mock_socket = self.mock_socket_patcher.start()
-        self.peer = Peer()
+        self.peer = Peer(id="TestPeer")
         self.peer.destroy = AsyncMock()
 
     async def asyncTearDown(self):
@@ -97,13 +99,38 @@ class TestPeer(unittest.IsolatedAsyncioTestCase):
         mock_json_class.assert_called_once()
         self.assertEqual(connection, mock_data_connection_instance)
 
-    def test_call(self):
+    async def test_call(self):
         with patch('peerjs_py.peer.MediaConnection') as mock_media_connection:
-            stream = Mock()
-            connection = self.peer.call("peer_id", stream)
-            mock_media_connection.assert_called_once_with("peer_id", self.peer, {'_stream': stream})
+            self.peer._socket = AsyncMock()
+            self.peer._socket.send = AsyncMock()
+            
+            # Create mock stream
+            mock_stream = Mock()
+            mock_stream.id = 'mock_stream_id'
+            mock_stream.getTracks.return_value = [
+                Mock(spec=MediaStreamTrack, kind="audio"),
+                Mock(spec=MediaStreamTrack, kind="video")
+            ]
+            
+            # Set up the mock MediaConnection
+            mock_media_connection_instance = AsyncMock()
+            mock_media_connection.return_value = mock_media_connection_instance
+            mock_media_connection_instance.initialize = AsyncMock()
+            
+            # Call the method
+            try:
+                connection = await asyncio.wait_for(self.peer.call("peer_id", mock_stream), timeout=1.0)
+            except asyncio.TimeoutError:
+                self.fail("peer.call() method timed out")
+            
+            # Assertions
+            mock_media_connection.assert_called_once_with("peer_id", self.peer, {'_stream': mock_stream})
+            mock_media_connection_instance.initialize.assert_awaited_once()
+            
             self.assertIn("peer_id", self.peer._connections)
-
+            self.assertIn(connection, self.peer._connections["peer_id"])
+            
+            
     async def test_destroy(self):
         mock_socket_instance = AsyncMock()
         mock_socket_instance.start = AsyncMock()

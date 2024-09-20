@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union, List
 import asyncio
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCIceCandidate, MediaStreamTrack, RTCDataChannel
 from aiortc.sdp import candidate_from_sdp, candidate_to_sdp
@@ -15,6 +15,7 @@ class Negotiator:
         self.local_description_set = False
 
     async def start_connection(self, options: Dict[str, Any]) -> None:
+        logger.info(f"Starting connection for {self.connection.connection_id}")
         peer_connection:RTCPeerConnection = await self._start_peer_connection()
         self.connection.peer_connection = peer_connection
 
@@ -23,23 +24,28 @@ class Negotiator:
         self.connection.connection_id = connection_id
 
         if self.connection.type == ConnectionType.Media and options.get('_stream'):
+            logger.info(f"Adding tracks to connection for {self.connection.connection_id}")
             self._add_tracks_to_connection(options['_stream'], peer_connection)
 
         logger.debug(f"start_connection => options: {options}")
         if options.get('originator'):
             if not self.connection.data_channel:
+                logger.info(f"Creating data channel for {self.connection.connection_id}")
                 data_channel:RTCDataChannel = peer_connection.createDataChannel(
                     label=connection_id, #self.connection.connection_id,
                     ordered=options.get("reliable", True),
                     protocol=options.get("protocol", ""),
                     # negotiated=False,
                 )
-                logger.debug(f"start_connection try connection._initialize_data_channel => options: {data_channel}")
+                logger.debug(f"start_connection try connection._initialize_data_channel options: {data_channel}")
                 await self.connection._initialize_data_channel(data_channel)
 
+            logger.info(f"Making offer for {self.connection.connection_id}")
             await self._make_offer()
+            logger.info(f"Offer made for {self.connection.connection_id}")
             # The actual sending of the offer will be triggered by the icegatheringstatechange event
         else:
+            logger.info(f"Handling SDP for {self.connection.connection_id}")
             await self.handle_sdp("OFFER", options['sdp'])
 
     async def _start_peer_connection(self):
@@ -74,7 +80,19 @@ class Negotiator:
             await connection._initialize_data_channel(channel)
         else:
             logger.info(f"datachannel event failed to get connect from peer_id:{peer_id} connection_id:{connection_id}")
+
             # await self.connection._initialize_data_channel(channel)
+        @channel.on("open")
+        def on_channel_open():
+            logger.info(f"on_data_channel Data channel '{channel.label}' opened")
+
+        @channel.on("close")
+        def on_channel_close():
+            logger.info(f"on_data_channel Data channel '{channel.label}' closed")
+
+        @channel.on("error")
+        def on_channel_error(error):
+            logger.error(f"on_data_channel Data channel '{channel.label}' error: {error}")
 
 
     def _setup_listeners(self, peer_connection: RTCPeerConnection):
@@ -250,7 +268,7 @@ class Negotiator:
             })
 
         message_type = ServerMessageType.Offer if local_description.type == "offer" else ServerMessageType.Answer
-        logger.info(f"Sending {message_type.value} with payload: {payload}")
+        logger.info(f"_send_offer_or_answer Sending {message_type.value} with payload: {payload}")
         
         await provider._socket.send({
             "type": message_type.value,
@@ -304,11 +322,24 @@ class Negotiator:
             await self.connection.provider.emit_error(PeerErrorType.WebRTC, err)
             logger.exception(f"Failed to handle ICE candidate: {err}")
 
-    def _add_tracks_to_connection(self, stream: Any, peer_connection: RTCPeerConnection) -> None:
+    def _add_tracks_to_connection(self, stream: Union[Any, List[MediaStreamTrack]], peer_connection: RTCPeerConnection) -> None:
+        if isinstance(stream, list):
+            # If stream is already a list of tracks
+            tracks = stream
+        elif hasattr(stream, 'getTracks'):
+            # If stream has getTracks method (like MediaStream)
+            tracks = stream.getTracks()
+        elif isinstance(stream, MediaStreamTrack):
+            # If stream is a single track
+            tracks = [stream]
+        else:
+            logger.warning(f"Unsupported stream type: {type(stream)}. Unable to add tracks.")
+            return
+        
         stream_id = getattr(stream, 'id', 'unknown')
-        logger.info(f"add tracks from stream {stream_id} to peer connection")
+        logger.info(f"Adding {len(tracks)} track(s) from stream {stream_id} to peer connection")
 
-        for track in stream.getTracks():
+        for track in tracks:
             peer_connection.addTrack(track)
 
     def _add_track_to_media_connection(self, track: MediaStreamTrack, media_connection: Any) -> None:

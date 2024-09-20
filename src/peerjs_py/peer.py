@@ -97,6 +97,8 @@ class Peer(AsyncIOEventEmitter):
         for key, serializer in self._serializers.items():
             if not callable(serializer):
                 raise TypeError(f"Serializer '{key}' must be callable")
+        logger.debug(f"peer.__init__ id: {id} Done")
+
     def id(self):
         return self._id
         # if id:
@@ -141,7 +143,7 @@ class Peer(AsyncIOEventEmitter):
         logger.info('Peer started with ID: %s', self._id)
 
     def _create_server_connection(self):
-        logger.debug(f"_create_server_connection with {self._options}")
+        logger.debug(f"_create_server_connection with options: {self._options}")
         socket = Socket(
             self._options.get('secure', True),
             self._options.get('host', 'localhost'),
@@ -157,6 +159,7 @@ class Peer(AsyncIOEventEmitter):
         socket.on(SocketEventType.Disconnected.value, self._on_disconnected)
         socket.on(SocketEventType.Close.value, self._on_close)
 
+        logger.debug(f"_create_server_connection with options: {self._options} : Done")
         return socket
 
     async def _on_disconnected(self):
@@ -360,20 +363,27 @@ class Peer(AsyncIOEventEmitter):
         logger.info(f"get_connection : Failed peer_id: {peer_id}  connection: {connection_id} connections:{connections}  self._connections: {self._connections}")
         return None
     
-    async def call(self, peer: str, stream, options=None):
+    async def call(self, peer_id: str, stream, options=None):
+        logger.info(f"Initiating call from {self._id} to {peer_id}")
+        if not options:
+            options = {
+                "_stream": stream,
+            }
         if self._disconnected:
             logger.warning("Cannot connect to new Peer after disconnecting from server.")
-            # fix emit_error is async
             self.emit_error(PeerErrorType.DISCONNECTED.value, "Cannot connect to new Peer after disconnecting from server.")
             return None
 
         if not stream:
             logger.error("To call a peer, you must provide a stream from your browser's `getUserMedia`.")
             return None
+        media_connection = MediaConnection(peer_id, self, {**(options or {}), '_stream': stream})
+        logger.info(f"MediaConnection created for call from {self._id} to {peer_id}")
 
-        media_connection = MediaConnection(peer, self, {**(options or {}), '_stream': stream})
         await media_connection.initialize()
-        self._add_connection(peer, media_connection)
+        logger.info(f"MediaConnection initialized for call from {self._id} to {peer_id}")
+        
+        self._add_connection(peer_id, media_connection)
         return media_connection
 
     def _add_connection(self, peer_id: str, connection):
