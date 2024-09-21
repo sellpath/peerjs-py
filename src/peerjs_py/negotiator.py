@@ -122,8 +122,8 @@ class Negotiator:
 
         logger.info("Listening for data channel")
         @peer_connection.on("datachannel")
-        async def on_data_channel_wrapper(channel):
-            await self.on_data_channel(channel)
+        def on_data_channel_wrapper(channel):
+            asyncio.create_task( self.on_data_channel(channel))
 
         logger.info("Listening for remote stream")
         @peer_connection.on("track")
@@ -269,8 +269,13 @@ class Negotiator:
             logger.error("No local description available to send")
             return
 
-        payload = {
+        sdp_message = {
             "sdp": local_description.sdp,
+            "type": local_description.type
+        }
+
+        payload = {
+            "sdp": sdp_message, #local_description.sdp,
             "type": self.connection.type,
             "connectionId": self.connection.connection_id,
             "metadata": self.connection.metadata,
@@ -301,13 +306,18 @@ class Negotiator:
         if self.connection_established:
             logger.info(f"Ignoring {type_} as connection is already established")
             return
-        
+            
+        logger.debug(f"Received SDP: {sdp}")
+        logger.debug(f"SDP type: {type(sdp)}")
+
         if type_ == ServerMessageType.Offer.value:
             if peer_connection.signalingState != "stable":
                 logger.warning("Ignoring offer in non-stable state")
                 return
             try:
-                sdp_obj = RTCSessionDescription(sdp=sdp, type=type_.lower())
+                sdp_string = sdp['sdp']
+                sdp_type = sdp['type'].lower()
+                sdp_obj = RTCSessionDescription(sdp=sdp_string, type=sdp_type)
                 await peer_connection.setRemoteDescription(sdp_obj)
                 logger.info(f"Set remoteDescription:{type_} for:{self.connection.peer}")
                 await self._make_answer()
@@ -321,9 +331,11 @@ class Negotiator:
                 logger.warning(f"Ignoring answer in {peer_connection.signalingState} state")
                 return
             try:
-                sdp_obj = RTCSessionDescription(sdp=sdp, type=type_.lower())
+                sdp_string = sdp['sdp']
+                sdp_type = sdp['type'].lower()
+                sdp_obj = RTCSessionDescription(sdp=sdp_string, type=sdp_type)
                 await peer_connection.setRemoteDescription(sdp_obj)
-                logger.info(f"Remote description set for ANSWER from peer {self.connection.peer}")
+                logger.info(f"Remote description set for {type_} from peer {self.connection.peer}")
                 self.connection_established = True
             except Exception as err:
                 logger.error(f"handle_sdp: ServerMessageType.Answer Failed to set remote description: {err}")

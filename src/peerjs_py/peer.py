@@ -101,12 +101,6 @@ class Peer(AsyncIOEventEmitter):
 
     def id(self):
         return self._id
-        # if id:
-        #     self._initialize(id)
-        # else:
-        #     self._api.retrieve_id().then(self._initialize).catch(
-        #         lambda error: self._abort(PeerErrorType.SERVER_ERROR, error)
-        #     )
 
     async def start(self):
         """Activate Peer instance."""
@@ -191,17 +185,17 @@ class Peer(AsyncIOEventEmitter):
             self._open = True
             self.emit(PeerEventType.Open.value, self._id)
         elif type_ == ServerMessageType.Error.value:
-            self._abort(PeerErrorType.SERVER_ERROR, payload['msg'])
+            await self._abort(PeerErrorType.SERVER_ERROR, payload['msg'])
         elif type_ == ServerMessageType.IdTaken.value:
-            self._abort(PeerErrorType.UNAVAILABLE_ID, f'ID "{self._id}" is taken')
+            await self._abort(PeerErrorType.UnavailableID, f'ID "{self._id}" is taken')
         elif type_ == ServerMessageType.InvalidKey.value:
-            self._abort(PeerErrorType.INVALID_KEY, f'API KEY "{self._options.get("key")}" is invalid')
+            await self._abort(PeerErrorType.InvalidKey, f'API KEY "{self._options.get("key")}" is invalid')
         elif type_ == ServerMessageType.Leave.value:
             logger.log(f"Received leave message from {peer_id}")
             self._cleanup_peer(peer_id)
             self._connections.pop(peer_id, None)
         elif type_ == ServerMessageType.Expire.value:
-            await self.emit_error(PeerErrorType.PEER_UNAVAILABLE.value, f"Could not connect to peer {peer_id}")
+            await self.emit_error(PeerErrorType.PeerUnavailable.value, f"Could not connect to peer {peer_id}")
         elif type_ == ServerMessageType.Offer.value:
             connection_id = payload['connectionId']
             connection = self.get_connection(peer_id, connection_id)
@@ -220,6 +214,7 @@ class Peer(AsyncIOEventEmitter):
                 connection = media_connection
                 self._add_connection(peer_id, connection)
                 self.emit(PeerEventType.Call.value, media_connection)
+
             elif payload['type'] == ConnectionType.Data.value:
                 serializer = self._serializers.get(payload['serialization'])
                 if not serializer:
@@ -247,9 +242,11 @@ class Peer(AsyncIOEventEmitter):
 
                 data_connection.connection_id = connection_id
 
+                data_connection._negotiator.on_data_channel_org=data_connection._negotiator.on_data_channel 
                 data_channel_initialized = asyncio.Future()
                 async def on_data_channel_wrapper(channel):
                     await data_connection._initialize_data_channel(channel)
+                    await data_connection._negotiator.on_data_channel_org(channel)
                     data_channel_initialized.set_result(True)
 
                 data_connection._negotiator.on_data_channel = on_data_channel_wrapper
@@ -270,6 +267,7 @@ class Peer(AsyncIOEventEmitter):
                 connection = data_connection
                 logger.info(f"serializer data_connection for {payload['serialization']}")
                 self._add_connection(peer_id, connection)
+                logger.info(f"Connection added, current connections: {self._connections}")
                 self.emit(PeerEventType.Connection.value, data_connection)
             else:
                 logger.warning(f"Received malformed connection type:{payload['type']}")
@@ -345,6 +343,14 @@ class Peer(AsyncIOEventEmitter):
             # raise e
         return data_connection
     
+    def _add_connection(self, peer_id: str, connection):
+        if peer_id not in self._connections:
+            self._connections[peer_id] = []
+        logger.info(f"_add_connection : peer_id: {peer_id}  connection: {connection.connection_id}")
+        self._connections[peer_id].append(connection)
+        # Add this line to log the current state of connections
+        logger.info(f"Current connections after adding: {self._connections}")
+
     def get_connection(self, peer_id: str, connection_id: str) -> Optional[Union[DataConnection, MediaConnection]]:
         """
         Retrieve a connection by peer ID and connection ID.
@@ -353,14 +359,17 @@ class Peer(AsyncIOEventEmitter):
         :param connection_id: The ID of the connection.
         :return: The connection if found, otherwise None.
         """
+        logger.info(f"Searching for connection - peer_id: {peer_id}, connection_id: {connection_id}")
+        logger.info(f"Current connections: {self._connections}")
         if not peer_id:
             logger.error(f"get_connection ==> peer_id none")
+            return None
         connections = self._connections.get(peer_id, [])
         for connection in connections:
             if connection.connection_id == connection_id:
-                logger.info(f"get_connection : Found peer_id: {peer_id}  connection: {connection_id}")
+                logger.info(f"get_connection : Found peer_id: {peer_id}  connection: {connection_id} connection: {connection}")
                 return connection
-        logger.info(f"get_connection : Failed peer_id: {peer_id}  connection: {connection_id} connections:{connections}  self._connections: {self._connections}")
+        logger.warning(f"get_connection : Failed peer_id: {peer_id}  connection: {connection_id} connections:{connections}  self._connections: {self._connections}")
         return None
     
     async def call(self, peer_id: str, stream: Any, options: Dict[str, Any] = None) -> MediaConnection:
@@ -371,7 +380,7 @@ class Peer(AsyncIOEventEmitter):
             }
         if self._disconnected:
             logger.warning("Cannot connect to new Peer after disconnecting from server.")
-            self.emit_error(PeerErrorType.DISCONNECTED.value, "Cannot connect to new Peer after disconnecting from server.")
+            self.emit_error(PeerErrorType.Disconnected.value, "Cannot connect to new Peer after disconnecting from server.")
             return None
 
         if not stream:
@@ -389,13 +398,6 @@ class Peer(AsyncIOEventEmitter):
         
         self._add_connection(peer_id, media_connection)
         return media_connection
-
-    def _add_connection(self, peer_id: str, connection):
-        if peer_id not in self._connections:
-            self._connections[peer_id] = []
-        logger.info(f"_add_connection : peer_id: {peer_id}  connection: {connection.connection_id}")
-        self._connections[peer_id].append(connection)
-
 
     async def _remove_connection(self, connection):
         """Remove a connection from the list of connections."""

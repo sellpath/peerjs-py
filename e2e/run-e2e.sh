@@ -6,22 +6,30 @@ export PYTHONPATH=$PYTHONPATH:$(pwd)/..:$(pwd)/../src
 # Set the working directory to the script's location
 cd "$(dirname "$0")"
 
-# Start the Python PeerJS server
+kill_existing_processes() {
+    echo "Checking for existing Python processes..."
+    ps ax | grep "peerjs-py-server.py\|py-client/client.py\|js-client" | grep -v grep | awk '{print $1}' | xargs -r kill
+    sleep 2
+}
+
+kill_existing_processes
+
+# Start the Python PeerJS server, 
 python3 peerjs-py-server.py --port 5000 &
 SERVER_PID=$!
 
 # Wait for the server to start
 # sleep 5
 
-# Start the Python client
-python3 py-client/client.py &
-PY_CLIENT_PID=$!
+# Start the Python client start with compatibility.test
+# python3 py-client/client.py > compatibility.test.log &
+# PY_CLIENT_PID=$!
 
 # Wait for the Python client to initialize
 # sleep 5
 
 # Start a simple HTTP server for the JavaScript client
-python3 -m http.server 8000 --directory js-client &
+python3 -m http.server 8000 --directory js-client&
 HTTP_SERVER_PID=$!
 
 # Wait for the HTTP server to start

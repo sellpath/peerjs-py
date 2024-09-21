@@ -12,13 +12,21 @@ function updateStatus(message) {
     statusElement.textContent = message;
 }
 
-function initPeer() {
-    peer = new Peer(undefined, {
-        host: 'localhost',
-        port: 5000,
-        path: '/peerjs'
-    });
+const peer_id = 'peerid_js';
+const py_peer_id = 'peerid_py';
 
+function initPeer() {
+    peer = new Peer(peer_id, {
+        host: 'dev-peerjs.sellpath.ai',
+        port: 443,
+        secure: true,
+        config: {
+            iceServers: [
+                { urls: "stun:stun.l.google.com:19302" },
+                // { urls: "turn:0.peerjs.com:3478", username: "peerjs", credential: "peerjsp" }
+            ]
+        }
+    });
 
     peer.on('open', (id) => {
         console.log(`Peer opened with ID: ${id}`);
@@ -51,19 +59,38 @@ function updateStatus(message) {
 }
 
 function setupConnection() {
+    console.log('Setting up connection...');
     conn.on('open', () => {
+        console.log('Connection opened');
         updateStatus('Connected to Python peer');
         sendMessageButton.disabled = false;
         callButton.disabled = false;
     });
 
     conn.on('data', (data) => {
+        console.log('Received data:', data);
         updateStatus(`Received: ${data}`);
+    });
+
+    conn.on('error', (error) => {
+        console.error('Connection error:', error);
+        updateStatus(`Connection error: ${error}`);
+    });
+
+    conn.on('close', () => {
+        console.log('Connection closed');
+        updateStatus('Connection closed');
     });
 }
 
+
 connectButton.addEventListener('click', () => {
-    conn = peer.connect('python-peer-id');
+    updateStatus(`Attempting to connect to peer: ${py_peer_id}`);
+    console.log(`Attempting to connect to peer: ${py_peer_id}`);
+    conn = peer.connect(py_peer_id, {
+        reliable: true,
+        serialization: 'json'
+    });
     setupConnection();
 });
 
@@ -74,14 +101,40 @@ sendMessageButton.addEventListener('click', () => {
     }
 });
 
+
 callButton.addEventListener('click', async () => {
+    console.log('==========click callButton')
     if (peer) {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        call = peer.call('python-peer-id', stream);
-        call.on('stream', (remoteStream) => {
-            remoteAudio.srcObject = remoteStream;
-        });
-        updateStatus('Voice call started');
+        try {
+            console.log("==Loading audio file...");
+            const audioElement = new Audio('sample-3s.mp3');
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const source = audioContext.createMediaElementSource(audioElement);
+            const destination = audioContext.createMediaStreamDestination();
+            source.connect(destination);
+
+            console.log("==Creating audio stream from file");
+            const stream = destination.stream;
+
+            console.log("==Got audio stream from file:", stream);
+            call = peer.call(py_peer_id, stream);
+            
+            console.log("Initiated call to Python peer");
+            call.on('stream', (remoteStream) => {
+                console.log("Received stream from Python peer");
+                remoteAudio.srcObject = remoteStream;
+                updateStatus('Voice call started');
+            });
+
+            // Start playing the audio file
+            audioElement.loop = true; // Loop the audio
+            audioElement.play();
+        } catch (error) {
+            console.error("Error initiating call:", error);
+            updateStatus('Error initiating call: ' + error.message);
+        }
+    } else {
+        console.error("==========Error click callButton  No peer yet");
     }
 });
 
