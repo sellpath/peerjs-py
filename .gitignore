@@ -18,3 +18,6 @@ dist/
 .pytest_cache/
 aiortc
 tests/received_audio.wav
+**/node_modules/*
+e2e/logs/
+**/.DS_Store
