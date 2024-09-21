@@ -1,6 +1,7 @@
 from typing import Any, Dict, Optional, Union, List
 import asyncio
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCIceCandidate, MediaStreamTrack, RTCDataChannel
+
 from aiortc.sdp import candidate_from_sdp, candidate_to_sdp
 from peerjs_py.enums import ConnectionType, ServerMessageType, BaseConnectionErrorType, PeerErrorType
 from peerjs_py.logger import logger
@@ -12,7 +13,9 @@ class Negotiator:
     def __init__(self, connection):
         self.connection = connection
         self.ice_gathering_complete = asyncio.Event()
-        self.local_description_set = False
+        self.local_description_set = asyncio.Event()
+        self.offer_answer_sent = False
+        self.connection_established = False
 
     async def start_connection(self, options: Dict[str, Any]) -> None:
         logger.info(f"Starting connection for {self.connection.connection_id}")
@@ -57,7 +60,8 @@ class Negotiator:
             else:
                 logger.warning("Attempting to create a new peer connection while an active one exists.")
                 return self.connection.peer_connection
-
+            
+        logger.info("Creating a new peer_connection RTCPeerConnection ")
         peer_connection: RTCPeerConnection = RTCPeerConnection(
             configuration=self.connection.provider._options.get('config')
         )
@@ -65,6 +69,7 @@ class Negotiator:
             logger.info("new peer_connection peer connection is closed or failed: {peer_connection.connectionState }")
         else:
             logger.info(f"new peer_connection peer connection state: {peer_connection.connectionState }")
+
         self._setup_listeners(peer_connection)
 
         return peer_connection
@@ -122,14 +127,20 @@ class Negotiator:
 
         logger.info("Listening for remote stream")
         @peer_connection.on("track")
-        def on_track(track):
-            logger.info("Received remote stream")
+        def on_track(track: MediaStreamTrack):
+            logger.info(f"Received remote track: {track.kind}")
+            
+            provider = self.connection.provider
             connection = provider.get_connection(peer_id, connection_id)
+            if not connection:
+                logger.error(f"track event failed to get connection from peer_id:{peer_id} connection_id:{connection_id}")
+                return
+            
             if connection.type == ConnectionType.Media:
                 media_connection = connection
-                self._add_track_to_media_connection(track, media_connection)
+                self._handle_track_for_media_connection(track, media_connection)
             else:
-                logger.error(f"track event failed to get connect from peer_id:{peer_id} connection_id:{connection_id}")
+                logger.error(f"Unexpected connection type for track event: peer_id:{peer_id} connection_id:{connection_id}")
 
 
         @peer_connection.on("signalingstatechange")
@@ -151,8 +162,7 @@ class Negotiator:
             self.connection.emit("iceGatheringStateChanged", peer_connection.iceGatheringState)
             if peer_connection.iceGatheringState == "complete":
                 self.ice_gathering_complete.set()
-                if self.local_description_set:
-                    asyncio.create_task(self._send_offer_or_answer())
+                asyncio.create_task(self._try_send_offer_or_answer())
 
     async def cleanup(self) -> None:
         logger.info(f"Cleaning up PeerConnection to {self.connection.peer}")
@@ -215,14 +225,10 @@ class Negotiator:
 
             logger.info("Attempting to set local description.")
             await peer_connection.setLocalDescription(offer)
-            self.local_description_set = True
+            self.local_description_set.set()
             logger.info(f"Set localDescription: {offer} for: {self.connection.peer}")
 
-            if self.ice_gathering_complete.is_set():
-                await self._send_offer_or_answer()
-            else:
-                await self.ice_gathering_complete.wait()
-                await self._send_offer_or_answer()
+            await self._try_send_offer_or_answer()
 
             # The actual sending of the offer will be triggered by the icegatheringstatechange event
         except Exception as err:
@@ -233,17 +239,28 @@ class Negotiator:
         logger.info("Creating answer")
         answer = await self.connection.peer_connection.createAnswer()
         await self.connection.peer_connection.setLocalDescription(answer)
+        self.local_description_set.set()
         logger.info("Local description set for ANSWER")
         # The actual sending of the answer will be triggered by the icegatheringstatechange event
 
-        if self.ice_gathering_complete.is_set():
-            await self._send_offer_or_answer()
-        else:
-            await self.ice_gathering_complete.wait()
-            await self._send_offer_or_answer()
+        await self._try_send_offer_or_answer()
 
     
+    async def _try_send_offer_or_answer(self):
+        if self.offer_answer_sent:
+            return
+
+        await asyncio.gather(self.local_description_set.wait(), self.ice_gathering_complete.wait())
+        
+        if not self.offer_answer_sent:
+            self.offer_answer_sent = True
+            await self._send_offer_or_answer()
+
     async def _send_offer_or_answer(self):
+        if self.connection_established:
+            logger.info("_send_offer_or_answer: Connection already established, not sending offer/answer")
+            return
+        
         peer_connection: RTCPeerConnection = self.connection.peer_connection
         provider = self.connection.provider
 
@@ -278,26 +295,36 @@ class Negotiator:
 
     async def handle_sdp(self, type_, sdp):
         logger.info(f"Negotiator handling SDP: {type_}")
+        peer_connection = self.connection.peer_connection
+        provider = self.connection.provider
+
+        if self.connection_established:
+            logger.info(f"Ignoring {type_} as connection is already established")
+            return
+        
         if type_ == ServerMessageType.Offer.value:
-            sdp_obj = RTCSessionDescription(sdp=sdp, type=type_.lower())
-            peer_connection = self.connection.peer_connection
-            provider = self.connection.provider
+            if peer_connection.signalingState != "stable":
+                logger.warning("Ignoring offer in non-stable state")
+                return
             try:
+                sdp_obj = RTCSessionDescription(sdp=sdp, type=type_.lower())
                 await peer_connection.setRemoteDescription(sdp_obj)
                 logger.info(f"Set remoteDescription:{type_} for:{self.connection.peer}")
-                logger.info("Remote description set for OFFER")
                 await self._make_answer()
-                logger.info(f"Answer created and local description set")
                 # The actual sending of the answer will be triggered by the icegatheringstatechange event
-
             except Exception as err:
-                logger.error(f"handle_sdp:  ServerMessageType.Offer Failed to set remote description: {err}")
+                logger.exception(f"handle_sdp:  ServerMessageType.Offer Failed to set remote description: {err}")
                 await provider.emit_error(PeerErrorType.WebRT.value, err)
             
         elif type_ == ServerMessageType.Answer.value:
+            if peer_connection.signalingState != "have-local-offer":
+                logger.warning(f"Ignoring answer in {peer_connection.signalingState} state")
+                return
             try:
-                await self.connection.peer_connection.setRemoteDescription(RTCSessionDescription(sdp, type_.lower()))
+                sdp_obj = RTCSessionDescription(sdp=sdp, type=type_.lower())
+                await peer_connection.setRemoteDescription(sdp_obj)
                 logger.info(f"Remote description set for ANSWER from peer {self.connection.peer}")
+                self.connection_established = True
             except Exception as err:
                 logger.error(f"handle_sdp: ServerMessageType.Answer Failed to set remote description: {err}")
                 await provider.emit_error(PeerErrorType.WebRTC.value, err)
@@ -342,9 +369,42 @@ class Negotiator:
         for track in tracks:
             peer_connection.addTrack(track)
 
-    def _add_track_to_media_connection(self, track: MediaStreamTrack, media_connection: Any) -> None:
+
+    def _handle_track_for_media_connection(self, track: MediaStreamTrack, media_connection: Any) -> None:
         logger.info(
-            f"add track {track.id} to media connection {media_connection.connection_id}"
+            f"Handling track {track.id} of kind {track.kind} for media connection {media_connection.connection_id}"
         )
 
-        media_connection.add_track(track)
+        # Instead of calling add_track, emit an event or update the MediaConnection's state
+        # This depends on how your MediaConnection class is implemented
+
+        if hasattr(media_connection, 'emit'):
+            media_connection.emit('track', track)
+            # media_connection.emit('stream', media_connection._remote_stream)
+        elif hasattr(media_connection, 'on_track'):
+            media_connection.on_track(track)
+        else:
+            logger.warning(f"Unable to handle track for media connection {media_connection.connection_id}. No suitable method found.")
+
+        # If MediaConnection has a tracks attribute, you might want to append the track
+        if hasattr(media_connection, 'tracks'):
+            media_connection.tracks.append(track)
+        
+        asyncio.create_task(media_connection._handle_track(track))
+
+
+    # not in use 
+    # def _add_track_to_media_connection(self, track: MediaStreamTrack, media_connection: Any) -> None:
+    #     logger.info(
+    #         f"add track {track.id} of kind {track.kind} to media connection {media_connection.connection_id}"
+    #     )
+
+    #     media_connection.add_track(track)
+
+    # not with aiortc  use _add_track_to_media_connection
+    # def _add_stream_to_media_connection(self, stream: MediaStream, media_connection: Any) -> None:
+    #     logger.info(
+    #         f"add stream {stream.id} to media connection {media_connection.connection_id}"
+    #     )
+
+    #     media_connection.add_stream(stream)

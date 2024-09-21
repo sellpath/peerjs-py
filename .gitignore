@@ -17,3 +17,4 @@ dist/
 .eggs/
 .pytest_cache/
 aiortc
+tests/received_audio.wav

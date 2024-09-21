@@ -7,6 +7,10 @@ from peerjs_py.negotiator import Negotiator
 from peerjs_py.base_connection import BaseConnection
 from peerjs_py.enums import ConnectionType, ServerMessageType, ConnectionEventType
 from peerjs_py.utils.random_token import random_token
+from aiortc import MediaStreamTrack, RTCPeerConnection
+
+from aiortc.contrib.media import MediaPlayer, MediaRelay, MediaRecorder
+
 
 class MediaConnectionEvents(BaseConnection.Events):
     stream: Callable[[object], None] #Emitted when a connection to the PeerServer is established.
@@ -23,8 +27,11 @@ class MediaConnection(BaseConnection):
         self._remote_stream: Optional[object] = None
         self._negotiator = Negotiator(self)
         self._open = False
+        self.open_future = asyncio.Future() 
+        self.peer_connection = None
         self._initialize_future = asyncio.Future()
-        self._provider = provider
+
+        self._active_tracks = set() 
         
         logger.info(f"MediaConnection created with ID: {self.connection_id} for peer: {peer_id}")
         logger.debug(f"MediaConnection options: {options}")
@@ -52,6 +59,28 @@ class MediaConnection(BaseConnection):
             self._initialize_future.set_exception(e)
         
         logger.info(f"MediaConnection initialization completed for: {self.connection_id}")
+
+    async def _initialize(self):
+        await super()._initialize()
+
+    async def _handle_track(self, track: MediaStreamTrack):
+        logger.info(f"MC#{self.connection_id} Received track: {track.kind}")
+        self._active_tracks.add(track)
+        self.emit('track', track)
+
+        # Add this code to start playing the received audio
+        if track.kind == "audio":
+            # player = MediaPlayer(track)
+            # self._remote_stream = player
+            # self.emit('stream', player)
+            self._remote_stream = track
+            self.emit('stream', track)
+
+
+        @track.on("ended")
+        def on_ended():
+            logger.info(f"MC#{self.connection_id} Track ended: {track.kind}")
+            self._active_tracks.discard(track)
 
     @property
     def type(self) -> ConnectionType:
@@ -81,6 +110,11 @@ class MediaConnection(BaseConnection):
             # self.emit(ConnectionEventType.Open.value)
             self.emit("willCloseOnRemote") # follow ts side impl
 
+        @self.data_channel.on("stream")
+        async def on_stream(stream):
+            logger.info(f"DC#{self.connection_id} dc stream case")
+            self.emit(ConnectionEventType.Stream.value, stream) # follow ts side impl
+
         @self.data_channel.on("close")
         async def on_close():
             logger.info(f"DC#{self.connection_id} dc closed for: {self.peer}")
@@ -108,17 +142,34 @@ class MediaConnection(BaseConnection):
 
         logger.debug(f"Handling message for MediaConnection {self.connection_id}: {message_type}")
 
-        if message_type == ServerMessageType.Answer:
+        if message_type == ServerMessageType.Answer.value:
             await self._negotiator.handle_sdp(message_type, payload['sdp'])
             # self._open = True
             # self.open_future.set_result(True)
-            logger.info(f"MediaConnection {self.connection_id} is now open")
-        elif message_type == ServerMessageType.Candidate:
+            logger.info(f"MC# MediaConnection {self.connection_id} is now open")
+            await self._negotiator.handle_sdp(message['type'], payload['sdp'])
+        elif message_type == ServerMessageType.Candidate.value:
+            logger.info(f"MC#{self.connection_id} Received ICE candidate from {self.peer}")
             await self._negotiator.handle_candidate(payload['candidate'])
         elif message_type == ServerMessageType.Offer.value:
-            await self._negotiator.handle_sdp(message_type, payload['sdp'])
+            # await self._negotiator.handle_sdp(message_type, payload['sdp'])
+            received_connection_id = payload.get('connectionId')
+            if received_connection_id and isinstance(received_connection_id, str):
+                if self.connection_id and self.connection_id != received_connection_id:
+                    logger.warning(f"DC# Received different connectionId: {received_connection_id}, current: {self.connection_id}")
+                else:
+                    self.connection_id = received_connection_id
+                    logger.info(f"DC#{self.connection_id} Received OFFER from {self.peer}")
+            else:
+                logger.warning("Received OFFER without valid connectionId fail set connection_id")
+
+            sdp = payload.get('sdp')
+            if sdp:
+                await self._negotiator.handle_sdp(message['type'], sdp)
+            else:
+                logger.error("Received OFFER without SDP")
         else:
-            logger.warning(f"Unrecognized message type:{message_type} from peer:{self.peer} for MediaConnection: {self.connection_id}")
+            logger.warning(f"MC#{self.connection_id} Unrecognized message type: {message['type']} from peer: {self.peer}")
 
     async def answer(self, stream: Optional[object] = None, options: dict = {}) -> None:
         logger.info(f"Answering call for MediaConnection: {self.connection_id}")
@@ -130,6 +181,16 @@ class MediaConnection(BaseConnection):
 
         if options.get('sdpTransform'):
             self.options['sdpTransform'] = options['sdpTransform']
+
+        if stream:
+            if isinstance(stream, list):
+                for track in stream:
+                    if isinstance(track, MediaStreamTrack):
+                        self.peer_connection.addTrack(track)
+            elif isinstance(track, MediaStreamTrack):
+                self.peer_connection.addTrack(stream)
+            else:
+                logger.warning(f"Unsupported stream type: {type(stream)}")
 
         await self._negotiator.start_connection({
             **self.options.get('_payload', {}),
@@ -144,8 +205,23 @@ class MediaConnection(BaseConnection):
         self.open_future.set_result(True)
         logger.info(f"MediaConnection {self.connection_id} answered and open")
 
+    def get_active_tracks(self):
+        return list(self._active_tracks)
+
     async def close(self) -> None:
         logger.info(f"Closing MediaConnection: {self.connection_id}")
+        tracks_to_stop = list(self._active_tracks)
+        for track in tracks_to_stop:
+            if hasattr(track, 'stop'):
+                if asyncio.iscoroutinefunction(track.stop):
+                    await track.stop()
+                else:
+                    track.stop()
+            else:
+                logger.warning(f"Track {track} doesn't have a stop method")
+
+        self._active_tracks.clear()
+
         if self._negotiator:
             await self._negotiator.cleanup()
             self._negotiator = None
@@ -165,6 +241,6 @@ class MediaConnection(BaseConnection):
             return
 
         self._open = False
-        self.open_future.set_result(False)
         super().emit("close")
         logger.info(f"MediaConnection {self.connection_id} closed")
+        await super().close()

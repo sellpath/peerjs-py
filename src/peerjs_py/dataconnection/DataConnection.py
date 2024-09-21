@@ -23,7 +23,6 @@ class DataConnection(BaseConnection):
         self.open_future = asyncio.Future()
         self.data_channel = None
         self.peer_connection = None
-        self._provider = provider
 
     async def initialize(self):
         await self._negotiator.start_connection(
@@ -42,13 +41,13 @@ class DataConnection(BaseConnection):
             logger.info(f"DC#{self.connection_id} Data channel already initialized")
             return
         
-        logger.info(f"DC#{self.connection_id} _initialize_data_channel Data channel start  self._provider:{self._provider._id}")
+        logger.info(f"DC#{self.connection_id} _initialize_data_channel Data channel start  self.provider:{self.provider._id}")
         self.data_channel = dc
         logger.info(f"DC#{self.connection_id} Initializing data channel")
         
         @self.data_channel.on("open")
         async def on_open():
-            logger.info(f"DC#{self.connection_id} Data channel opened <======self._provider:{self._provider._id}")
+            logger.info(f"DC#{self.connection_id} Data channel opened <======self.provider:{self.provider._id}")
             self._open = True
             self.open_future.set_result(True)
             self.emit(ConnectionEventType.Open.value)

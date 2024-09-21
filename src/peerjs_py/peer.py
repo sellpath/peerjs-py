@@ -116,7 +116,7 @@ class Peer(AsyncIOEventEmitter):
             await self._socket.start(id=self._id, token=self)
             logger.info("Successfully connected to signaling server")
         except Exception as e:
-            logger.error(f"Failed to connect to signaling server: {e}")
+            logger.exception(f"Failed to connect to signaling server: {e}")
             await self.emit_error(PeerErrorType.SocketError.value, "Could not connect to signaling server")
             return
         # Sanity checks
@@ -212,7 +212,7 @@ class Peer(AsyncIOEventEmitter):
 
             if payload['type'] == ConnectionType.Media.value:
                 media_connection = MediaConnection(peer_id, self, {
-                    'connectionId': connection_id,
+                    'connection_id': connection_id,
                     '_payload': payload,
                     'metadata': payload.get('metadata')
                 })
@@ -363,7 +363,7 @@ class Peer(AsyncIOEventEmitter):
         logger.info(f"get_connection : Failed peer_id: {peer_id}  connection: {connection_id} connections:{connections}  self._connections: {self._connections}")
         return None
     
-    async def call(self, peer_id: str, stream, options=None):
+    async def call(self, peer_id: str, stream: Any, options: Dict[str, Any] = None) -> MediaConnection:
         logger.info(f"Initiating call from {self._id} to {peer_id}")
         if not options:
             options = {
@@ -379,6 +379,10 @@ class Peer(AsyncIOEventEmitter):
             return None
         media_connection = MediaConnection(peer_id, self, {**(options or {}), '_stream': stream})
         logger.info(f"MediaConnection created for call from {self._id} to {peer_id}")
+
+        @media_connection.on('stream')
+        def on_stream(remote_stream):
+            logger.info(f"Received remote stream on_stream for connection: {media_connection.connection_id}")
 
         await media_connection.initialize()
         logger.info(f"MediaConnection initialized for call from {self._id} to {peer_id}")
