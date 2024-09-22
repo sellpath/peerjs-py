@@ -45,7 +45,7 @@ jobs:
       run: |
         cd ./e2e/
         npm install
-        run-e2e.sh
+        ./run-e2e.sh
 
 
   publish:
