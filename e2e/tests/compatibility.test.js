@@ -165,9 +165,11 @@ describe('PeerJS Compatibility Test', () => {
         expect(audioFileExists).toBe(true);
     
         const jsAudioReceived = await browser.execute(() => {
-            return document.getElementById('remoteAudio').src !== '';
+            const remoteAudio = document.getElementById('remoteAudio');
+            return remoteAudio.srcObject instanceof MediaStream;
         });
         expect(jsAudioReceived).toBe(true);
+        
         console.log('==========should establish connection and exchange JSON message:Browser logs =================');
         await logBrowserConsole();
         console.log('==========should initiate and complete a voice call: Done=================');

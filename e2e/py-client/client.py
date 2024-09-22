@@ -5,6 +5,11 @@ from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaPlayer, MediaRecorder
 from peerjs_py.util import util, DEFAULT_CONFIG
 from aiortc.rtcconfiguration import RTCConfiguration, RTCIceServer
+from aiortc.rtcrtpreceiver import MediaStreamError 
+
+import soundfile as sf
+import numpy as np
+
 import logging
 from peerjs_py.logger import logger, LogLevel
 import signal
@@ -70,6 +75,28 @@ async def handle_connection(conn, peer):
         logger.error(f"Connection error: {error}")
         print(f"Connection error: {error}")
 
+
+async def record_audio(track, filename, duration=10):
+    print(f"Started recording to {filename}")
+    frames = []
+    start_time = asyncio.get_event_loop().time()
+    
+    while asyncio.get_event_loop().time() - start_time < duration:
+        try:
+            frame = await track.recv()
+            # Convert frame data to numpy array
+            numpy_data = np.frombuffer(frame.planes[0], dtype=np.int16)
+            frames.append(numpy_data)
+        except MediaStreamError:
+            break
+
+    if frames:
+        audio_data = np.concatenate(frames)
+        sf.write(filename, audio_data, frame.sample_rate)
+        print(f"Finished recording to {filename}")
+    else:
+        print("No audio data received")
+
 async def handle_call(call, peer):
     global recorder
     print(f"Handling incoming call from {call.peer}")
@@ -77,21 +104,15 @@ async def handle_call(call, peer):
     recording_done = asyncio.Event()
 
     @call.on("stream")
-    async def on_stream(stream):
+    def on_stream_wrapper(track):
+        asyncio.create_task(on_stream(track))
+
+    async def on_stream(track):
         print(f"Received stream from {call.peer}")
         try:
-            recorder = MediaRecorder("received_audio.wav")
-            recorder.addTrack(stream.getAudioTracks()[0])
-            await recorder.start()
-            print("Started recording")
-
-            try:
-                await asyncio.wait_for(recording_done.wait(), timeout=5)
-            except asyncio.TimeoutError:
-                print("Recording timed out after 5 seconds")
-
-            await recorder.stop()
-            print("Stopped recording")
+            # recorder = MediaRecorder("received_audio.wav")
+            # recorder.addTrack(stream.getAudioTracks()[0])  # if track is stream that has multiple tracks
+            await record_audio(track, "received_audio.wav")
             print("Voice call completed and audio saved")
 
         except Exception as e:

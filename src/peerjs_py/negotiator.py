@@ -390,10 +390,11 @@ class Negotiator:
         # Instead of calling add_track, emit an event or update the MediaConnection's state
         # This depends on how your MediaConnection class is implemented
 
-        if hasattr(media_connection, 'emit'):
-            media_connection.emit('track', track)
-            # media_connection.emit('stream', media_connection._remote_stream)
-        elif hasattr(media_connection, 'on_track'):
+        # if hasattr(media_connection, 'emit'):
+        #     media_connection.emit('track', track)
+        #     media_connection.emit('stream', media_connection._remote_stream)
+        # el
+        if hasattr(media_connection, 'on_track'):
             media_connection.on_track(track)
         else:
             logger.warning(f"Unable to handle track for media connection {media_connection.connection_id}. No suitable method found.")

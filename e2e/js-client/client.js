@@ -120,9 +120,11 @@ callButton.addEventListener('click', async () => {
             call = peer.call(py_peer_id, stream);
             
             call.on('stream', (remoteStream) => {
-                console.log("Received stream from Python peer");
+                console.log("Received stream from Python peer:", remoteStream);
+                console.log("Stream type:", remoteStream.constructor.name);
+                console.log("Stream has audio tracks:", remoteStream.getAudioTracks().length > 0);
+                
                 remoteAudio.srcObject = remoteStream;
-                remoteAudio.src = URL.createObjectURL(remoteStream);
                 updateStatus('Voice call connected');
 
                 // Save the received audio

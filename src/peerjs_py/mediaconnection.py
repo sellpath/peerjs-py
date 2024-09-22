@@ -68,6 +68,7 @@ class MediaConnection(BaseConnection):
         logger.info(f"MC#{self.connection_id} Received track: {track.kind}")
         self._active_tracks.add(track)
         self.emit('track', track)
+        
 
         # Add this code to start playing the received audio
         if track.kind == "audio":

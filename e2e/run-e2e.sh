@@ -29,11 +29,20 @@ SERVER_PID=$!
 # sleep 5
 
 # Start a simple HTTP server for the JavaScript client
-python3 -m http.server 8000 --directory js-client&
+python3 -m http.server 8000 --directory js-client &
 HTTP_SERVER_PID=$!
 
 # Wait for the HTTP server to start
 sleep 5
+
+echo "Current working directory: $(pwd)"
+
+# Check if npx command exists
+if ! command -v npx &> /dev/null
+then
+    echo "Error: npx command not found. Please install Node.js and npm. and install packages.  npm install "
+    exit 1
+fi
 
 echo "Current working directory: $(pwd)"
 TS_NODE_PROJECT=./tsconfig.json npx wdio run ./wdio.local.conf.ts

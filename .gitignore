@@ -22,3 +22,5 @@ tests/received_audio.wav
 e2e/logs/
 **/.DS_Store
 .DS_Store
+e2e/received_audio.wav
+e2e/py-client/received_audio.wav
