@@ -1,18 +1,9 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Union
 from enum import Enum
+from peerjs_py.enums import BaseConnectionErrorType, ConnectionType
+from peerjs_py.peer_error import PeerError, EventEmitterWithError
 
-class ConnectionType(Enum):
-    pass
-
-class BaseConnectionErrorType(Enum):
-    pass
-
-class PeerError(Exception):
-    pass
-
-class EventEmitterWithError:
-    pass
 
 class Peer:
     pass

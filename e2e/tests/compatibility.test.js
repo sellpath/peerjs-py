@@ -6,19 +6,6 @@ const { exec } = require('child_process');
 
 let browser;
 
-function checkPythonLogs() {
-    return new Promise((resolve, reject) => {
-        exec('grep "Python client:" compatibility.test.log', (error, stdout, stderr) => {
-            if (error) {
-                console.error(`Error checking Python logs: ${error}`);
-                reject(error);
-            }
-            console.log('Python client logs:', stdout);
-            resolve(stdout);
-        });
-    });
-}
-
 describe('Basic test', () => {
     it('should pass', () => {
         expect(true).toBe(true);
@@ -75,10 +62,13 @@ describe('PeerJS Compatibility Test', () => {
         }
     
         // Start Python client
-        const clientPath = path.join(__dirname, '..', 'py-client', 'client.py');
+        // DEBUGGING disable it
+        // const clientPath = path.join(__dirname, '..', 'py-client', 'client.py');
+        const pyClientDir = path.join(__dirname, '..', 'py-client');
+        const clientPath = path.join(pyClientDir, 'client.py');
         console.log(`Attempting to start Python client at: ${clientPath}`);
 
-        pyProcess = spawn('python', [clientPath]);
+        pyProcess = spawn('python', [clientPath], { cwd: pyClientDir });
 
         pyProcess.stdout.on('data', (data) => {
             console.log(`Python client stdout: ${data}`);
@@ -164,7 +154,7 @@ describe('PeerJS Compatibility Test', () => {
         await status.waitUntil(async function () {
             const text = await this.getText();
             console.log('test2: Current status:', text);  // Add this line for more detailed logging
-            return text.includes('Voice call completed');
+            return text.includes('Audio playback completed');
         }, { 
             timeout: 60000,  // Increase timeout to 60 seconds
             timeoutMsg: 'Expected voice call to complete within 60 seconds'
@@ -183,13 +173,31 @@ describe('PeerJS Compatibility Test', () => {
         console.log('==========should initiate and complete a voice call: Done=================');
     });
 
-    afterAll(async () => {  // Add 'async' here
-        // Stop Python client
+    afterAll(async () => {  
+        clearInterval(logInterval);
+
+        console.log('Sending shutdown signal to Python client');
         if (pyProcess) {
-            pyProcess.kill();
+            pyProcess.kill('SIGTERM');
+            
+            // Wait for the Python process to exit
+            await new Promise((resolve) => {
+                pyProcess.on('exit', (code) => {
+                    console.log(`Python client exited with code ${code}`);
+                    if (code === 0) {
+                        console.log('Python client shut down successfully');
+                    } else {
+                        console.warn(`Python client exited with non-zero code: ${code}`);
+                    }
+                    resolve();
+                });
+            });
         }
+
         if (browser) {
             await browser.deleteSession();
         }
+
+        console.log('Test cleanup complete');
     });
 });

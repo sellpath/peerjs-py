@@ -9,13 +9,26 @@
             "name": "Python Debugger: e2e test",
             "type": "debugpy",
             "request": "launch",
-            "program": "e2e-test.py",
+            "program": "e2e/e2e-test.py",
             "env": {
                 "PYTHONPATH": "${PYTHONPATH}:${workspaceFolder}:${workspaceFolder}/src"
             },
             "console": "integratedTerminal",
             // "args": "${command:pickArgs}"
             "justMyCode": false
+        },
+        {
+            "name": "peerjs e2e python side",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "client.py",
+            "env": {
+                "PYTHONPATH": "${PYTHONPATH}:${workspaceFolder}:${workspaceFolder}/src"
+            },
+            "console": "integratedTerminal",
+            // "args": "${command:pickArgs}"
+            "justMyCode": false,
+            "cwd": "${workspaceFolder}/e2e/py-client"
         },
         {
             "name": "Python Debugger: Current File",

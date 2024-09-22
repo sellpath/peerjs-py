@@ -7,23 +7,32 @@ from peerjs_py.util import util, DEFAULT_CONFIG
 from aiortc.rtcconfiguration import RTCConfiguration, RTCIceServer
 import logging
 from peerjs_py.logger import logger, LogLevel
+import signal
 
 logger.set_log_level(LogLevel.All)
-
-aiortc_logger = logging.getLogger("aiortc")
-aiortc_logger.setLevel(logging.DEBUG)
-aiortc_logge_pc = logging.getLogger("pc")
-aiortc_logge_pc.setLevel(logging.DEBUG)
-aiortc_logge_datachannel = logging.getLogger("datachannel")
-aiortc_logge_datachannel.setLevel(logging.DEBUG)
-
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
+# aiortc_logger = logging.getLogger("aiortc")
+# aiortc_logger.setLevel(logging.DEBUG)
+# aiortc_logge_pc = logging.getLogger("pc")
+# aiortc_logge_pc.setLevel(logging.DEBUG)
+# aiortc_logge_datachannel = logging.getLogger("datachannel")
+# aiortc_logge_datachannel.setLevel(logging.DEBUG)
+# logging.basicConfig(level=logging.DEBUG)
+# logger = logging.getLogger(__name__)
 
 peer_id = "peerid_py"
 js_peer_id = "peerid_js"
 connection = None
 recorder = None
+
+shutdown_event = None
+loop = None
+
+def signal_handler(signum, frame):
+    print("Received shutdown signal")
+    if loop is not None:
+        loop.call_soon_threadsafe(shutdown_event.set)
+
+signal.signal(signal.SIGTERM, signal_handler)
 
 async def handle_connection(conn, peer):
     global connection
@@ -61,9 +70,11 @@ async def handle_connection(conn, peer):
         logger.error(f"Connection error: {error}")
         print(f"Connection error: {error}")
 
-async def handle_call(call):
+async def handle_call(call, peer):
     global recorder
     print(f"Handling incoming call from {call.peer}")
+
+    recording_done = asyncio.Event()
 
     @call.on("stream")
     async def on_stream(stream):
@@ -73,15 +84,26 @@ async def handle_call(call):
             recorder.addTrack(stream.getAudioTracks()[0])
             await recorder.start()
             print("Started recording")
-            await asyncio.sleep(5)  # Record for 5 seconds
+
+            try:
+                await asyncio.wait_for(recording_done.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                print("Recording timed out after 5 seconds")
+
             await recorder.stop()
             print("Stopped recording")
             print("Voice call completed and audio saved")
+
         except Exception as e:
             print(f"Error during call handling: {e}")
 
+    @call.on("close")
+    def on_close():
+        print("Call closed")
+        recording_done.set()
+
     try:
-        audio = MediaPlayer("../tests/sample-3s.mp3")
+        audio = MediaPlayer("./sample-3s.mp3")
         if not audio or not audio.audio:
             print("Error: MediaPlayer failed to load audio")
             return
@@ -100,6 +122,10 @@ async def send_message(connection, message):
         logger.error(f"Failed to send message: {e}")
 
 async def main():
+    global shutdown_event, loop
+    shutdown_event = asyncio.Event()
+    loop = asyncio.get_running_loop()
+
     config = {
         "host": "dev-peerjs.sellpath.ai",
         "port": 443,
@@ -134,7 +160,7 @@ async def main():
     @peer.on(PeerEventType.Call.value)
     async def on_call(call):
         logger.info(f"Received call from: {call.peer}")
-        await handle_call(call)
+        await handle_call(call, peer)
 
     @peer.on(PeerEventType.Error.value)
     def on_error(error):
@@ -152,8 +178,14 @@ async def main():
         return
 
     # Keep the script running
-    while True:
-        await asyncio.sleep(1)
+    try:
+        await shutdown_event.wait()
+    except asyncio.CancelledError:
+        pass
+
+    print("Shutting down Python client")
+    await peer.destroy()
+    print("Python client shutdown complete")
 
 if __name__ == "__main__":
     asyncio.run(main())

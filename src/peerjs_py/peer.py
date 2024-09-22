@@ -210,7 +210,7 @@ class Peer(AsyncIOEventEmitter):
                     '_payload': payload,
                     'metadata': payload.get('metadata')
                 })
-                await media_connection.initialize()
+                await media_connection.initialize() # no effect as no _stream passed
                 connection = media_connection
                 self._add_connection(peer_id, connection)
                 self.emit(PeerEventType.Call.value, media_connection)
@@ -294,6 +294,9 @@ class Peer(AsyncIOEventEmitter):
                 logger.debug(f"connection Pass message peer_id:{peer_id} of type:{type_} to connection_id:{connection_id}")
                 #pass to next connection
                 await connection.handle_message(message)
+            # elif connection:  # to be fixed
+            #     logger.debug(f"connection exists but peer_connection not ready, handling message directly")
+            #     await connection.handle_message(message)
             elif connection_id:
                 logger.debug(f"store message peer_id:{peer_id} of type:{type_} to connection_id: {connection_id} but connection.peer_connection not ready")
                 self._store_message(connection_id, message)
@@ -386,6 +389,7 @@ class Peer(AsyncIOEventEmitter):
         if not stream:
             logger.error("To call a peer, you must provide a stream from your browser's `getUserMedia`.")
             return None
+        
         media_connection = MediaConnection(peer_id, self, {**(options or {}), '_stream': stream})
         logger.info(f"MediaConnection created for call from {self._id} to {peer_id}")
 

@@ -44,8 +44,9 @@ class MediaConnection(BaseConnection):
 
     async def initialize(self):
         logger.info(f"Initializing MediaConnection: {self.connection_id}")
+
         try:
-            if self._local_stream:
+            if self._local_stream:  # .call to call other or  answer when answer call  set _local_stream
                 logger.debug(f"Starting connection with local stream for MediaConnection: {self.connection_id}")
                 await self._negotiator.start_connection({
                     '_stream': self._local_stream,
@@ -172,7 +173,7 @@ class MediaConnection(BaseConnection):
             logger.warning(f"MC#{self.connection_id} Unrecognized message type: {message['type']} from peer: {self.peer}")
 
     async def answer(self, stream: Optional[object] = None, options: dict = {}) -> None:
-        logger.info(f"Answering call for MediaConnection: {self.connection_id}")
+        logger.info(f"Answering call for MediaConnection: {self.connection_id} {stream}")
         if self._local_stream:
             logger.warning(f"Local stream already exists on MediaConnection: {self.connection_id}. Are you answering a call twice?")
             return
@@ -182,20 +183,23 @@ class MediaConnection(BaseConnection):
         if options.get('sdpTransform'):
             self.options['sdpTransform'] = options['sdpTransform']
 
-        if stream:
-            if isinstance(stream, list):
-                for track in stream:
-                    if isinstance(track, MediaStreamTrack):
-                        self.peer_connection.addTrack(track)
-            elif isinstance(track, MediaStreamTrack):
-                self.peer_connection.addTrack(stream)
-            else:
-                logger.warning(f"Unsupported stream type: {type(stream)}")
-
         await self._negotiator.start_connection({
             **self.options.get('_payload', {}),
             '_stream': stream
         })
+        try:
+            if stream:
+                if isinstance(stream, list):
+                    for track in stream:
+                        if isinstance(track, MediaStreamTrack):
+                            self.peer_connection.addTrack(track)
+                elif isinstance(stream, MediaStreamTrack):
+                    self.peer_connection.addTrack(stream)
+                else:
+                    logger.warning(f"Unsupported stream type: {type(stream)}")
+        except Exception as e:
+            logger.warning(f"peer_connection.addTrack error: {e}")
+
         messages = self.provider._get_messages(self.connection_id)
         logger.debug(f"Processing {len(messages)} queued messages for MediaConnection: {self.connection_id}")
         for msg in messages:

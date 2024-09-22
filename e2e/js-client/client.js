@@ -49,6 +49,7 @@ function initPeer() {
         call.answer();
         call.on('stream', (remoteStream) => {
             remoteAudio.srcObject = remoteStream;
+            remoteAudio.src = URL.createObjectURL(remoteStream);
         });
     });
 }
@@ -101,7 +102,6 @@ sendMessageButton.addEventListener('click', () => {
     }
 });
 
-
 callButton.addEventListener('click', async () => {
     console.log('==========click callButton')
     if (peer) {
@@ -116,22 +116,79 @@ callButton.addEventListener('click', async () => {
             console.log("==Creating audio stream from file");
             const stream = destination.stream;
 
-            console.log("==Got audio stream from file:", stream);
+            console.log("==Initiating call to Python peer");
             call = peer.call(py_peer_id, stream);
             
-            console.log("Initiated call to Python peer");
             call.on('stream', (remoteStream) => {
                 console.log("Received stream from Python peer");
                 remoteAudio.srcObject = remoteStream;
-                updateStatus('Voice call started');
+                remoteAudio.src = URL.createObjectURL(remoteStream);
+                updateStatus('Voice call connected');
+
+                // Save the received audio
+                const mediaRecorder = new MediaRecorder(remoteStream);
+                const chunks = [];
+
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        chunks.push(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(chunks, { type: 'audio/wav' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = 'received_audio.wav';
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(() => {
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(url);
+                    }, 100);
+                };
+
+                mediaRecorder.start();
+
+                // Stop recording after 5 seconds (adjust as needed)
+                setTimeout(() => {
+                    mediaRecorder.stop();
+                }, 2000);
             });
 
-            // Start playing the audio file
-            audioElement.loop = true; // Loop the audio
-            audioElement.play();
+            // Wait for the call to be established
+            // await new Promise(resolve => call.on('open', resolve));
+
+            console.log("==Call established, starting audio playback");
+            updateStatus('Sending audio...');
+            
+            // Start playing the audio file (this is when it actually starts sending)
+            audioElement.loop = false;
+            await audioElement.play();
+
+            // Wait for the audio to finish playing
+            await new Promise(resolve => {
+                audioElement.onended = resolve;
+            });
+
+            console.log("Audio finished playing");
+            updateStatus('Audio playback completed');
+
+            if (call) {
+                call.close();
+                call = null;
+            }
+
+            // Clean up audio resources
+            source.disconnect();
+            audioContext.close();
+            updateStatus('Audio playback completed');
+
         } catch (error) {
-            console.error("Error initiating call:", error);
-            updateStatus('Error initiating call: ' + error.message);
+            console.error("Error during call:", error);
+            updateStatus('Error during call: ' + error.message);
         }
     } else {
         console.error("==========Error click callButton  No peer yet");

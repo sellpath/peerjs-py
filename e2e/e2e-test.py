@@ -123,7 +123,7 @@ async def create_peer(peer_id):
     
     @peer.on(PeerEventType.Error.value)
     async def on_error(error):
-        logger.error(f"Peer {peer_id} encountered an error: {error}")
+        logger.error(f"Peer {peer_id} encountered an type:{error.type}  error: {error}")
     
     await peer.start()
 
@@ -216,8 +216,10 @@ async def setup_voice_call(peer1, peer2):
                     recording_finished.set()
             
             logger.info(f"{peer2._id} answering call")
-            await incoming_call.answer(None)  # Answer the call without sending a stream
-        
+            # await incoming_call.answer(None)  # Answer the call without sending a stream
+            response_player = MediaPlayer(voice_file)
+            await incoming_call.answer(response_player.audio) # Answer the call with some audio
+
         logger.info(f"{peer1._id} initiating call to {peer2._id}")
         call = await asyncio.wait_for(peer1.call(peer2._id, player.audio), timeout=30)
         logger.info(f"e2e test: Call initiated by {peer1._id}")
