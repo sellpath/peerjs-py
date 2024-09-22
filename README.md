@@ -39,6 +39,7 @@ python
 from peerjs_python import Peer, PeerOptions
 ```
 
+
 ### Create a Peer instance
 ```
 peer = Peer(PeerOptions(
@@ -101,7 +102,6 @@ def on_stream(stream):
   # Handle the incoming audio stream
 ```
 
-
 ### File Transfer
 
 To send files between peers:
@@ -134,5 +134,50 @@ def on_error(error):
   print(f"An error occurred: {error}")
 ```
 
-For more detailed information and advanced usage, please refer to the full documentation.
+## Testing
 
+To ensure the reliability and functionality of peerjs-py, we have implemented a comprehensive testing suite. Before running the tests, please note that you must have your own PeerJS signaling server set up.
+
+### Running Tests
+
+We use pytest as our testing framework. To run the tests, follow these steps:
+
+1. Ensure you have pytest installed:
+   ```
+   pip install pytest
+   ```
+
+2. Navigate to the project root directory.
+
+3. Run the tests using pytest:
+   ```
+   pytest
+   ```
+
+### End-to-End Tests
+
+We have two types of end-to-end (e2e) tests to verify the functionality of peerjs-py in different scenarios:
+
+1. **Python Client to Python Client Test**
+   This test checks the communication between two Python clients using peerjs-py.
+   
+   To run this test:
+   ```
+   ./e2e/run-e2e.sh
+   ```
+
+2. **PeerJS Browser Client to Python Client Test**
+   This test verifies the compatibility between a PeerJS browser client and a Python client using peerjs-py.
+   
+   To run this test:
+   ```
+   ./e2e/run-e2e-test-py.sh
+   ```
+
+### Important Notes
+
+- Ensure your PeerJS signaling server is running and accessible before executing the tests.
+- The end-to-end tests may require additional setup or dependencies. Please refer to the respective script files for any specific instructions.
+- If you encounter any issues during testing, check your server configuration and network connectivity.
+
+By running these tests, you can verify that peerjs-py is working correctly in various scenarios and is compatible with both Python-to-Python and Browser-to-Python communications.

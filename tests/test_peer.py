@@ -103,7 +103,7 @@ class TestPeer(unittest.IsolatedAsyncioTestCase):
         with patch('peerjs_py.peer.MediaConnection') as mock_media_connection:
             self.peer._socket = AsyncMock()
             self.peer._socket.send = AsyncMock()
-            
+
             # Create mock stream
             mock_stream = Mock()
             mock_stream.id = 'mock_stream_id'
@@ -111,24 +111,42 @@ class TestPeer(unittest.IsolatedAsyncioTestCase):
                 Mock(spec=MediaStreamTrack, kind="audio"),
                 Mock(spec=MediaStreamTrack, kind="video")
             ]
-            
+
             # Set up the mock MediaConnection
             mock_media_connection_instance = AsyncMock()
             mock_media_connection.return_value = mock_media_connection_instance
             mock_media_connection_instance.initialize = AsyncMock()
-            
+
+            # Mock the 'on' method to capture the event handler
+            mock_media_connection_instance.on = Mock()
+
             # Call the method
-            try:
-                connection = await asyncio.wait_for(self.peer.call("peer_id", mock_stream), timeout=1.0)
-            except asyncio.TimeoutError:
-                self.fail("peer.call() method timed out")
-            
+            connection = await self.peer.call("peer_id", mock_stream)
+
             # Assertions
             mock_media_connection.assert_called_once_with("peer_id", self.peer, {'_stream': mock_stream})
             mock_media_connection_instance.initialize.assert_awaited_once()
-            
+
             self.assertIn("peer_id", self.peer._connections)
             self.assertIn(connection, self.peer._connections["peer_id"])
+
+            # Check if 'on' method was called with 'stream' event
+            mock_media_connection_instance.on.assert_called_with('stream')
+
+            # Verify that the 'on' method was called and capture the callback
+            self.assertTrue(mock_media_connection_instance.on.called)
+            call_args = mock_media_connection_instance.on.call_args
+            self.assertEqual(call_args[0][0], 'stream')
+            
+            # Verify that there's only one argument passed to 'on'
+            self.assertEqual(len(call_args[0]), 1)
+
+            # Print out the call_args for debugging
+            print(f"call_args: {call_args}")
+            print(f"call_args[0]: {call_args[0]}")
+
+            # If you want to verify the implementation of 'on', you might need to check the Peer class
+            # and see how it's actually using the 'on' method of MediaConnection
             
             
     async def test_destroy(self):

@@ -40,6 +40,7 @@ class PeerErrorType(Enum):
     SocketClosed = "socket-closed"
     UnavailableID = "unavailable-id"
     WebRTC = "webrtc"
+    InvalidSerialization= "invalid-serialization"
 
 class BaseConnectionErrorType(Enum):
     PEER_UNAVAILABLE = "peer-unavailable"

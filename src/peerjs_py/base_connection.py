@@ -5,10 +5,8 @@ from aiortc import RTCPeerConnection, RTCDataChannel
 from pyee.asyncio import AsyncIOEventEmitter
 from peerjs_py.enums import ConnectionEventType, ConnectionType, BaseConnectionErrorType, ServerMessageType
 from peerjs_py.peer_error import PeerError, EventEmitterWithError
-# from peerjs_py.peer import Peer
 from peerjs_py.servermessage import ServerMessage
 
-# T = TypeVar('T', bound=Union[str, BaseConnectionErrorType])
 
 class BaseConnection(EventEmitterWithError[Union[str, BaseConnectionErrorType]], ABC):
     def __init__(self, peer: str, provider, options: Dict[str, Any]):

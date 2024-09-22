@@ -1,6 +1,7 @@
 from typing import Generic, TypeVar, Callable
 from pyee import EventEmitter
 from typing import Union
+from pyee.asyncio import AsyncIOEventEmitter
 
 from peerjs_py.enums import PeerEventType
 from peerjs_py.logger import logger
@@ -16,11 +17,11 @@ class PeerError(Generic[ErrorType], Exception):
             self.__dict__.update(err.__dict__)
         self.type = type
 
-class EventEmitterWithError(Generic[ErrorType], EventEmitter):
+class EventEmitterWithError(Generic[ErrorType], EventEmitter): #EventEmitter  # AsyncIOEventEmitter
     def emit_error(self, type: ErrorType, err: Union[str, Exception]) -> None:
-        logger.error("Error: %s", err)
+        logger.error("EventEmitterWithError Error: %s", err)
         self.emit(PeerEventType.Error.value, PeerError(type, err))
 
     async def emit_error_async(self, type: ErrorType, err: Union[str, Exception]) -> None:
-        logger.error("Error: %s", err)
+        logger.error("EventEmitterWithError Error: %s", err)
         self.emit(PeerEventType.Error.value, PeerError(type, err))
