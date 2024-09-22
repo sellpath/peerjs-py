@@ -7,7 +7,7 @@ name = "peerjs_py"
 dynamic = ["version"]
 description = "A Python implementation of PeerJS"
 readme = "README.md"
-authors = [{ name = "Mansu Kim", email = "mkim@sellpath" }]
+authors = [{ name = "Mansu Kim", email = "mkim@sellpath.com" }]
 license = { file = "LICENSE" }
 classifiers = [
     "License :: OSI Approved :: MIT License",

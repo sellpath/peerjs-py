@@ -30,7 +30,7 @@ jobs:
         pip install pytest
         pip install -e .
         # test dependancis
-        pip install .[test]
+        pip install ".[test]"
     - name: Run pytest
       run: pytest
     - name: Run e2e tests
