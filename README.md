@@ -1,5 +1,4 @@
 # peerjs-py
-# peerjs-py
 
 peerjs-py is a Python implementation of the PeerJS library, allowing peer-to-peer connections in Python applications.
 
