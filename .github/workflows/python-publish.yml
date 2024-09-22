@@ -37,7 +37,6 @@ jobs:
     - name: Run e2e tests - python
       run: |
         ./e2e/run-e2e-test-py.sh
-      run: pytest
     - name: Run e2e tests - browswer-python
       run: |
         cd ./e2e/
