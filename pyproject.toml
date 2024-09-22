@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "peerjs_py"
+dynamic = ["version"]
+description = "A Python implementation of PeerJS"
+readme = "README.md"
+authors = [{ name = "Mansu Kim", email = "mkim@sellpath.com" }]
+license = { file = "LICENSE" }
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+]
+keywords = ["peerjs", "webrtc", "networking"]
+dependencies = [
+    "aiortc>=1.9.0,<2.0.0",
+    "pyee>=12.0.0,<13.0.0",
+    "aiohttp>=3.7.4,<4.0.0",
+    "requests>=2.25.1,<3.0.0",
+]
+requires-python = ">=3.6"
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "python-socketio",
+    "soundfile",
+    "numpy",
+    "pydub",
+    "scipy"
+]
+
+[tool.setuptools_scm]
+
+[tool.pytest.ini_options]
+addopts = [
+    "--import-mode=importlib",
+    "-k 'not test_GenerateCompileDBWithNinja'"
+]
