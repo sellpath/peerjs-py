@@ -15,8 +15,8 @@ kill_existing_processes() {
 kill_existing_processes
 
 # Start the Python PeerJS server, 
-python3 peerjs-py-server.py --port 5000 &
-SERVER_PID=$!
+# python3 peerjs-py-server.py --port 5000 &
+# SERVER_PID=$!
 
 # Wait for the server to start
 # sleep 5
@@ -50,8 +50,8 @@ TS_NODE_PROJECT=./tsconfig.json npx wdio run ./wdio.local.conf.ts
 # npx wdio run --autoCompileOpts.tsNodeOpts.project=./tsconfig.json ./wdio.local.conf.ts
 
 # Kill the Python server, Python client, and HTTP server
-kill $SERVER_PID
-kill $PY_CLIENT_PID
+# kill $SERVER_PID
+# kill $PY_CLIENT_PID
 kill $HTTP_SERVER_PID
 
 echo "E2E tests completed."
