@@ -91,7 +91,6 @@ async def create_peer(peer_id):
             open_event.set()
             await send_message(peer_conn, f"Hello from {peer._id}!")
 
-        # @peer_conn.on(ConnectionEventType.Data.value)
         async def on_data(data):
             logger.info(f'e2e test: received {peer._id} received: {data}')
             # await send_message(peer_conn, f"Hello back from {peer._id}!")
@@ -147,11 +146,6 @@ async def connect_peers(peer1, peer2):
         logger.error(f"e2e test: Failed to create connection between {peer1._id} and {peer2._id}")
         return
 
-    # @peer1_conn.on(ConnectionEventType.Open.value)
-    # async def on_open():
-    #     logger.info(f"e2e test: Connection opened between {peer1._id} and {peer2._id}")
-    #     connection_opened.set()
-
     try:
         # Wait for the connection to open
         # await asyncio.wait_for(connection_opened.wait(), timeout=120)
@@ -190,11 +184,12 @@ async def setup_voice_call(peer1, peer2):
         recording_finished = asyncio.Event()
 
         logger.info(f"e2e test: Registering 'call' event handler for {peer2._id}")
+
         @peer2.on('call')
-        async def on_call(incoming_call):
-            logger.info(f"e2e test: {peer2._id} received incoming call from {peer1._id} incoming_call:{incoming_call}")
+        async def on_call(incoming_call_mc):
+            logger.info(f"e2e test: {peer2._id} received incoming call from {peer1._id} incoming_call:{incoming_call_mc}")
             
-            @incoming_call.on('stream')
+            @incoming_call_mc.on('stream')
             def on_stream(stream):
                 asyncio.create_task(handle_stream(stream))
 
@@ -218,7 +213,7 @@ async def setup_voice_call(peer1, peer2):
             logger.info(f"{peer2._id} answering call")
             # await incoming_call.answer(None)  # Answer the call without sending a stream
             response_player = MediaPlayer(voice_file)
-            await incoming_call.answer(response_player.audio) # Answer the call with some audio
+            await incoming_call_mc.answer(response_player.audio) # Answer the call with some audio
 
         logger.info(f"{peer1._id} initiating call to {peer2._id}")
         call = await asyncio.wait_for(peer1.call(peer2._id, player.audio), timeout=30)
@@ -242,7 +237,6 @@ async def setup_voice_call(peer1, peer2):
         logger.error(f"e2e test: Timeout while setting up voice call between  {peer1._id}/{peer1._open} and {peer2._id}/{peer2._open}")
     except Exception as e:
         logger.error(f"e2e test: Error during voice call: {str(e)}")
-
 
 
 
@@ -335,8 +329,8 @@ async def shutdown_peers(*peers):
 async def async_main():
     try:
         logger.info('e2e test: >>>>> Starting two peers and connecting them. <<<<')
-        peer1 = await create_peer("peer1")
-        peer2 = await create_peer("peer2")
+        peer1 = await create_peer("peer1") # connect to signaling server
+        peer2 = await create_peer("peer2") # connect to signaling server
       
         logger.info('e2e test: >>>>> Starting two peers and connect and exchange hello world <<<<')
         await connect_peers(peer1, peer2)

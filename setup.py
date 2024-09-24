@@ -9,7 +9,7 @@ class PyTest(TestCommand):
 
 setup(
     name="peerjs_py",
-    version="0.1.0",
+    version="0.1.1",
     packages=find_packages(where="src"),
     package_dir={"": "src"},
     install_requires=[
