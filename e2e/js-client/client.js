@@ -12,11 +12,21 @@ function updateStatus(message) {
     statusElement.textContent = message;
 }
 
-const peer_id = 'peerid_js';
-const py_peer_id = 'peerid_py';
+const DEFAULT_MY_PEER_ID = 'peerid_js';
+const DEFAULT_PY_PEER_ID = 'peerid_py';
+
+function getMyPeerId() {
+    const input = document.getElementById('mypeerIdInput');
+    return input && input.value.trim() || DEFAULT_MY_PEER_ID;
+}
+function getPyPeerId() {
+    const input = document.getElementById('peerIdInput');
+    return input && input.value.trim() || DEFAULT_PY_PEER_ID;
+}
 
 function initPeer() {
-    peer = new Peer(peer_id, {
+    const myPeerId = getMyPeerId();
+    peer = new Peer(myPeerId, {
         host: 'dev-peerjs.sellpath.ai',
         port: 443,
         secure: true,
@@ -86,9 +96,11 @@ function setupConnection() {
 
 
 connectButton.addEventListener('click', () => {
-    updateStatus(`Attempting to connect to peer: ${py_peer_id}`);
-    console.log(`Attempting to connect to peer: ${py_peer_id}`);
-    conn = peer.connect(py_peer_id, {
+    const pyPeerId = getPyPeerId();
+
+    updateStatus(`Attempting to connect to connect ${pyPeerId}`);
+    console.log(`Attempting to connect to connect ${pyPeerId}`);
+    conn = peer.connect(pyPeerId, {
         reliable: true,
         serialization: 'json'
     });
@@ -103,21 +115,29 @@ sendMessageButton.addEventListener('click', () => {
 });
 
 callButton.addEventListener('click', async () => {
+    const pyPeerId = getPyPeerId();
     console.log('==========click callButton')
     if (peer) {
         try {
-            console.log("==Loading audio file...");
-            const audioElement = new Audio('sample-3s.mp3');
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            const source = audioContext.createMediaElementSource(audioElement);
-            const destination = audioContext.createMediaStreamDestination();
-            source.connect(destination);
+            console.log("==Loading audio...");
+            let stream;
+            const useBrowserAudio = document.getElementById('useBrowserAudio').checked;
 
-            console.log("==Creating audio stream from file");
-            const stream = destination.stream;
+            if (useBrowserAudio) {
+                console.log("==Using browser audio");
+                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            } else {
+                console.log("==Using local audio file");
+                const audioElement = new Audio('sample-3s.mp3');
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const source = audioContext.createMediaElementSource(audioElement);
+                const destination = audioContext.createMediaStreamDestination();
+                source.connect(destination);
+                stream = destination.stream;
+            }
 
-            console.log("==Initiating call to Python peer");
-            call = peer.call(py_peer_id, stream);
+            console.log(`==Initiating call to Python peer  call ${pyPeerId}`);
+            call = peer.call(pyPeerId, stream);
             
             call.on('stream', (remoteStream) => {
                 console.log("Received stream from Python peer:", remoteStream);
@@ -132,12 +152,14 @@ callButton.addEventListener('click', async () => {
                 const chunks = [];
 
                 mediaRecorder.ondataavailable = (event) => {
+                    updateStatus('Voice call connected: mediaRecorder ondataavailable');
                     if (event.data.size > 0) {
                         chunks.push(event.data);
                     }
                 };
 
                 mediaRecorder.onstop = () => {
+                    updateStatus('Voice call connected: mediaRecorder onstop');
                     const blob = new Blob(chunks, { type: 'audio/wav' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
@@ -149,43 +171,44 @@ callButton.addEventListener('click', async () => {
                     setTimeout(() => {
                         document.body.removeChild(a);
                         window.URL.revokeObjectURL(url);
+                        updateStatus('Audio playback completed');
                     }, 100);
                 };
 
                 mediaRecorder.start();
 
-                // Stop recording after 5 seconds (adjust as needed)
+                const useBrowserAudio = document.getElementById('useBrowserAudio').checked;
+                let recordingDuration = useBrowserAudio ? 5000 : 3000; // 10 seconds for browser audio, 3 seconds for local file
+            
+                // Stop recording after 2 seconds (adjust as needed)
                 setTimeout(() => {
+                    updateStatus('Voice call connected: mediaRecorder stop done');
                     mediaRecorder.stop();
-                }, 2000);
+                }, recordingDuration);
             });
 
             // Wait for the call to be established
-            // await new Promise(resolve => call.on('open', resolve));
+            if (!useBrowserAudio) {
+                console.log(`==Call established, starting audio playback  call ${pyPeerId}`);
+                updateStatus('Sending audio...');
+                
+                // Start playing the audio file (this is when it actually starts sending)
+                audioElement.loop = false;
+                await audioElement.play();
 
-            console.log("==Call established, starting audio playback");
-            updateStatus('Sending audio...');
-            
-            // Start playing the audio file (this is when it actually starts sending)
-            audioElement.loop = false;
-            await audioElement.play();
+                // Wait for the audio to finish playing
+                await new Promise(resolve => {
+                    audioElement.onended = resolve;
+                });
 
-            // Wait for the audio to finish playing
-            await new Promise(resolve => {
-                audioElement.onended = resolve;
-            });
+                console.log("Audio finished playing");
+                updateStatus('Audio playback completed');
 
-            console.log("Audio finished playing");
-            updateStatus('Audio playback completed');
-
-            if (call) {
-                call.close();
-                call = null;
+                // Clean up audio resources
+                source.disconnect();
+                audioContext.close();
             }
 
-            // Clean up audio resources
-            source.disconnect();
-            audioContext.close();
             updateStatus('Audio playback completed');
 
         } catch (error) {

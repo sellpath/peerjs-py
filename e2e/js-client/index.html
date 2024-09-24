@@ -12,9 +12,21 @@
 <body>
     <h1>PeerJS JavaScript Client</h1>
     <div id="status">Initializing...</div>
+    <div>
+        <label for="MypeerIdInput">My Peer ID:</label>
+        <input type="text" id="MypeerIdInput" placeholder="Enter My peer ID">
+    </div>
+    <div>
+        <label for="peerIdInput">Python Peer ID:</label>
+        <input type="text" id="peerIdInput" placeholder="Enter python peer ID">
+    </div>
     <button id="connect">Connect to Python Peer</button>
     <button id="sendMessage">Send Message</button>
     <button id="call">Start Voice Call</button>
+    <div>
+        <input type="checkbox" id="useBrowserAudio">
+        <label for="useBrowserAudio">Use Browser Audio</label>
+    </div>
     <audio id="remoteAudio" autoplay></audio>
 </body>
 </html>
