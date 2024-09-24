@@ -47,15 +47,14 @@ class Util(BinaryPackChunker):
         self.browserVersion = self.supports_instance.get_version()
         self.pack = pack
         self.unpack = unpack
-        # self.supports = self._init_supports()
-        self.supports = asyncio.run(self._init_supports())
+        self.supports = self._init_supports()
         self.validateId = validateId
         self.randomToken = random_token
 
     def noop(self) -> None:
         pass
 
-    async def _init_supports(self) -> UtilSupportsObj:
+    def _init_supports(self) -> UtilSupportsObj:
         supported = UtilSupportsObj()
         supported.browser = self.supports_instance.is_platform_supported()
         supported.webRTC = self.supports_instance.is_webrtc_supported()
@@ -84,7 +83,7 @@ class Util(BinaryPackChunker):
 
             # Clean up
             dc.close()  # RTCDataChannel.close
-            await pc.close()
+            # await pc.close()
         except Exception:
             pass
 
