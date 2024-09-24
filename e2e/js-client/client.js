@@ -152,12 +152,14 @@ callButton.addEventListener('click', async () => {
                 const chunks = [];
 
                 mediaRecorder.ondataavailable = (event) => {
+                    updateStatus('Voice call connected: mediaRecorder ondataavailable');
                     if (event.data.size > 0) {
                         chunks.push(event.data);
                     }
                 };
 
                 mediaRecorder.onstop = () => {
+                    updateStatus('Voice call connected: mediaRecorder onstop');
                     const blob = new Blob(chunks, { type: 'audio/wav' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
@@ -169,15 +171,20 @@ callButton.addEventListener('click', async () => {
                     setTimeout(() => {
                         document.body.removeChild(a);
                         window.URL.revokeObjectURL(url);
+                        updateStatus('Audio playback completed');
                     }, 100);
                 };
 
                 mediaRecorder.start();
 
-                // Stop recording after 5 seconds (adjust as needed)
+                const useBrowserAudio = document.getElementById('useBrowserAudio').checked;
+                let recordingDuration = useBrowserAudio ? 5000 : 3000; // 10 seconds for browser audio, 3 seconds for local file
+            
+                // Stop recording after 2 seconds (adjust as needed)
                 setTimeout(() => {
+                    updateStatus('Voice call connected: mediaRecorder stop done');
                     mediaRecorder.stop();
-                }, 2000);
+                }, recordingDuration);
             });
 
             // Wait for the call to be established
