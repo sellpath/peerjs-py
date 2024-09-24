@@ -119,15 +119,22 @@ callButton.addEventListener('click', async () => {
     console.log('==========click callButton')
     if (peer) {
         try {
-            console.log("==Loading audio file...");
-            const audioElement = new Audio('sample-3s.mp3');
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            const source = audioContext.createMediaElementSource(audioElement);
-            const destination = audioContext.createMediaStreamDestination();
-            source.connect(destination);
+            console.log("==Loading audio...");
+            let stream;
+            const useBrowserAudio = document.getElementById('useBrowserAudio').checked;
 
-            console.log("==Creating audio stream from file");
-            const stream = destination.stream;
+            if (useBrowserAudio) {
+                console.log("==Using browser audio");
+                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            } else {
+                console.log("==Using local audio file");
+                const audioElement = new Audio('sample-3s.mp3');
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const source = audioContext.createMediaElementSource(audioElement);
+                const destination = audioContext.createMediaStreamDestination();
+                source.connect(destination);
+                stream = destination.stream;
+            }
 
             console.log(`==Initiating call to Python peer  call ${pyPeerId}`);
             call = peer.call(pyPeerId, stream);
@@ -174,31 +181,27 @@ callButton.addEventListener('click', async () => {
             });
 
             // Wait for the call to be established
-            // await new Promise(resolve => call.on('open', resolve));
+            if (!useBrowserAudio) {
+                console.log(`==Call established, starting audio playback  call ${pyPeerId}`);
+                updateStatus('Sending audio...');
+                
+                // Start playing the audio file (this is when it actually starts sending)
+                audioElement.loop = false;
+                await audioElement.play();
 
-            console.log(`==Call established, starting audio playback  call ${pyPeerId}`);
-            updateStatus('Sending audio...');
-            
-            // Start playing the audio file (this is when it actually starts sending)
-            audioElement.loop = false;
-            await audioElement.play();
+                // Wait for the audio to finish playing
+                await new Promise(resolve => {
+                    audioElement.onended = resolve;
+                });
 
-            // Wait for the audio to finish playing
-            await new Promise(resolve => {
-                audioElement.onended = resolve;
-            });
+                console.log("Audio finished playing");
+                updateStatus('Audio playback completed');
 
-            console.log("Audio finished playing");
-            updateStatus('Audio playback completed');
-
-            if (call) {
-                call.close();
-                call = null;
+                // Clean up audio resources
+                source.disconnect();
+                audioContext.close();
             }
 
-            // Clean up audio resources
-            source.disconnect();
-            audioContext.close();
             updateStatus('Audio playback completed');
 
         } catch (error) {
