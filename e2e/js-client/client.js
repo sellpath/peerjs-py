@@ -24,6 +24,14 @@ function getPyPeerId() {
     return input && input.value.trim() || DEFAULT_PY_PEER_ID;
 }
 
+// Add this new function
+function reinitializePeer() {
+    if (peer) {
+        peer.destroy();
+    }
+    initPeer();
+}
+
 function initPeer() {
     const myPeerId = getMyPeerId();
     peer = new Peer(myPeerId, {
@@ -219,5 +227,7 @@ callButton.addEventListener('click', async () => {
         console.error("==========Error click callButton  No peer yet");
     }
 });
+
+document.getElementById('mypeerIdInput').addEventListener('change', reinitializePeer);
 
 initPeer();
