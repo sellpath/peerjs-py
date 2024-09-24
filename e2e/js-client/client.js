@@ -12,11 +12,21 @@ function updateStatus(message) {
     statusElement.textContent = message;
 }
 
-const peer_id = 'peerid_js';
-const py_peer_id = 'peerid_py';
+const DEFAULT_MY_PEER_ID = 'peerid_js';
+const DEFAULT_PY_PEER_ID = 'peerid_py';
+
+function getMyPeerId() {
+    const input = document.getElementById('mypeerIdInput');
+    return input && input.value.trim() || DEFAULT_MY_PEER_ID;
+}
+function getPyPeerId() {
+    const input = document.getElementById('peerIdInput');
+    return input && input.value.trim() || DEFAULT_PY_PEER_ID;
+}
 
 function initPeer() {
-    peer = new Peer(peer_id, {
+    const myPeerId = getMyPeerId();
+    peer = new Peer(myPeerId, {
         host: 'dev-peerjs.sellpath.ai',
         port: 443,
         secure: true,
@@ -86,9 +96,11 @@ function setupConnection() {
 
 
 connectButton.addEventListener('click', () => {
-    updateStatus(`Attempting to connect to peer: ${py_peer_id}`);
-    console.log(`Attempting to connect to peer: ${py_peer_id}`);
-    conn = peer.connect(py_peer_id, {
+    const pyPeerId = getPyPeerId();
+
+    updateStatus(`Attempting to connect to connect ${pyPeerId}`);
+    console.log(`Attempting to connect to connect ${pyPeerId}`);
+    conn = peer.connect(pyPeerId, {
         reliable: true,
         serialization: 'json'
     });
@@ -103,6 +115,7 @@ sendMessageButton.addEventListener('click', () => {
 });
 
 callButton.addEventListener('click', async () => {
+    const pyPeerId = getPyPeerId();
     console.log('==========click callButton')
     if (peer) {
         try {
@@ -116,8 +129,8 @@ callButton.addEventListener('click', async () => {
             console.log("==Creating audio stream from file");
             const stream = destination.stream;
 
-            console.log("==Initiating call to Python peer");
-            call = peer.call(py_peer_id, stream);
+            console.log(`==Initiating call to Python peer  call ${pyPeerId}`);
+            call = peer.call(pyPeerId, stream);
             
             call.on('stream', (remoteStream) => {
                 console.log("Received stream from Python peer:", remoteStream);
@@ -163,7 +176,7 @@ callButton.addEventListener('click', async () => {
             // Wait for the call to be established
             // await new Promise(resolve => call.on('open', resolve));
 
-            console.log("==Call established, starting audio playback");
+            console.log(`==Call established, starting audio playback  call ${pyPeerId}`);
             updateStatus('Sending audio...');
             
             // Start playing the audio file (this is when it actually starts sending)
